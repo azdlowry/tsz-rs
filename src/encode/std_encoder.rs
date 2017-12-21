@@ -119,7 +119,7 @@ impl<T> StdEncoder<T>
             let leading_zeroes = xor.leading_zeros();
             let trailing_zeroes = xor.trailing_zeros();
 
-            if leading_zeroes >= self.leading_zeroes && trailing_zeroes >= self.trailing_zeroes {
+            if leading_zeroes == self.leading_zeroes && trailing_zeroes == self.trailing_zeroes {
                 // if the number of leading and trailing zeroes in this xor are >= the leading and
                 // trailing zeroes in the previous xor then we only need to store a control bit and
                 // the significant digits of this xor
