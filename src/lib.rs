@@ -33,7 +33,7 @@
 //! extern crate tsz;
 //!
 //! use std::vec::Vec;
-//! use tsz::{DataPoint, Encode, Decode, StdEncoder, StdDecoder};
+//! use tsz::{DataPoint, Encode, Decode, StdEncoder, StdDecoder, SimplePredictor};
 //! use tsz::stream::{BufferedReader, BufferedWriter};
 //! use tsz::decode::Error;
 //!
@@ -56,10 +56,11 @@
 //! ";
 //!
 //! fn main() {
+//!     let p = SimplePredictor::new();
 //!     let w = BufferedWriter::new();
 //!
 //!     // 1482892260 is the Unix timestamp of the start of the stream
-//!     let mut encoder = StdEncoder::new(1482892260, w);
+//!     let mut encoder = StdEncoder::new(1482892260, w, p);
 //!
 //!     let mut actual_datapoints = Vec::new();
 //!
@@ -150,6 +151,10 @@ impl DataPoint {
 
 pub mod stream;
 
+pub mod predictor;
+pub use self::predictor::Predictor;
+pub use self::predictor::{SimplePredictor, FcmPredictor, DfcmPredictor};
+
 pub mod encode;
 pub use self::encode::Encode;
 pub use self::encode::std_encoder::StdEncoder;
@@ -162,7 +167,7 @@ pub use self::decode::std_decoder::StdDecoder;
 mod tests {
     use std::vec::Vec;
 
-    use super::{DataPoint, Encode, Decode, StdEncoder, StdDecoder};
+    use super::{DataPoint, Encode, Decode, StdEncoder, StdDecoder, SimplePredictor};
     use super::stream::{BufferedReader, BufferedWriter};
     use super::decode::Error;
 
@@ -187,7 +192,8 @@ mod tests {
     #[test]
     fn integration_test() {
         let w = BufferedWriter::new();
-        let mut encoder = StdEncoder::new(1482892260, w);
+        let p = SimplePredictor::new();
+        let mut encoder = StdEncoder::new(1482892260, w, p);
 
         let mut original_datapoints = Vec::new();
 
@@ -205,7 +211,8 @@ mod tests {
 
         let bytes = encoder.close();
         let r = BufferedReader::new(bytes);
-        let mut decoder = StdDecoder::new(r);
+        let p = SimplePredictor::new();
+        let mut decoder = StdDecoder::new(r, p);
 
         let mut new_datapoints = Vec::new();
 

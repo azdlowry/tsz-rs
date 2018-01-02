@@ -4,19 +4,19 @@ use {Bit, DataPoint};
 use stream::Read;
 use decode::{Decode, Error};
 use encode::std_encoder::{END_MARKER, END_MARKER_LEN};
+use predictor::Predictor;
 
 /// StdDecoder
 ///
 /// StdDecoder is used to decode `DataPoint`s
 #[derive(Debug)]
-pub struct StdDecoder<T: Read> {
+pub struct StdDecoder<T: Read, P: Predictor> {
     time: u64, // current time
     delta: u64, // current time delta
-    value_bits: u64, // current float value as bits
-    xor: u64, // current xor
+    predictor: P,
 
-    leading_zeroes: u32, // leading zeroes
-    trailing_zeroes: u32, // trailing zeroes
+    leading_zeros: u32, // leading zeros
+    trailing_zeros: u32, // trailing zeros
 
     first: bool, // will next DataPoint be the first DataPoint decoded
     done: bool,
@@ -24,18 +24,17 @@ pub struct StdDecoder<T: Read> {
     r: T,
 }
 
-impl<T> StdDecoder<T>
-    where T: Read
+impl<T, P> StdDecoder<T, P>
+    where T: Read, P: Predictor
 {
     /// new creates a new StdDecoder which will read bytes from r
-    pub fn new(r: T) -> Self {
+    pub fn new(r: T, p: P) -> Self {
         StdDecoder {
             time: 0,
             delta: 0,
-            value_bits: 0,
-            xor: 0,
-            leading_zeroes: 0,
-            trailing_zeroes: 0,
+            predictor: p,
+            leading_zeros: 0,
+            trailing_zeros: 0,
             first: true,
             done: false,
             r: r,
@@ -134,39 +133,44 @@ impl<T> StdDecoder<T>
             .read_bits(64)
             .map_err(|err| Error::Stream(err))
             .map(|bits| {
-                self.value_bits = bits;
-                self.value_bits
+                self.predictor.update(bits);
+                bits
             })
     }
 
     fn read_next_value(&mut self) -> Result<u64, Error> {
         let contol_bit = self.r.read_bit()?;
+        let predicted_value = self.predictor.predict_next();
 
         if contol_bit == Bit::Zero {
-            return Ok(self.value_bits);
+            //println!("<- Bit::Zero = {}", predicted_value);
+            return Ok(predicted_value);
         }
 
-        let zeroes_bit = self.r.read_bit()?;
+        let zeros_bit = self.r.read_bit()?;
 
-        if zeroes_bit == Bit::One {
-            self.leading_zeroes = self.r.read_bits(6).map(|n| n as u32)?;
+        if zeros_bit == Bit::One {
+            self.leading_zeros = self.r.read_bits(6).map(|n| n as u32)?;
             let significant_digits = self.r.read_bits(6).map(|n| (n + 1) as u32)?;
-            self.trailing_zeroes = 64 - self.leading_zeroes - significant_digits;
+            //println!("<- predicted_trailing_zeros = 64 - {} - {}", self.leading_zeros, significant_digits);
+            self.trailing_zeros = 64 - self.leading_zeros - significant_digits;
         }
 
-        let size = 64 - self.leading_zeroes - self.trailing_zeroes;
+        let size = 64 - self.leading_zeros - self.trailing_zeros;
         self.r
             .read_bits(size)
             .map_err(|err| Error::Stream(err))
             .map(|bits| {
-                self.value_bits ^= bits << self.trailing_zeroes;
-                self.value_bits
+                let value_bits = predicted_value ^ (bits << self.trailing_zeros);
+                //println!("<- {} = {} ^ ({} << {})", value_bits, predicted_value, bits, self.trailing_zeros);
+                self.predictor.update(value_bits);
+                value_bits
             })
     }
 }
 
-impl<T> Decode for StdDecoder<T>
-    where T: Read
+impl<T, P> Decode for StdDecoder<T, P>
+    where T: Read, P: Predictor
 {
     fn next(&mut self) -> Result<DataPoint, Error> {
         if self.done {
@@ -209,12 +213,14 @@ mod tests {
     use stream::BufferedReader;
     use decode::Error;
     use super::StdDecoder;
+    use predictor::SimplePredictor;
 
     #[test]
     fn create_new_decoder() {
         let bytes = vec![0, 0, 0, 0, 88, 89, 157, 151, 240, 0, 0, 0, 0];
         let r = BufferedReader::new(bytes.into_boxed_slice());
-        let mut decoder = StdDecoder::new(r);
+        let p = SimplePredictor::new();
+        let mut decoder = StdDecoder::new(r, p);
 
         assert_eq!(decoder.next().err().unwrap(), Error::EndOfStream);
     }
@@ -224,7 +230,8 @@ mod tests {
         let bytes = vec![0, 0, 0, 0, 88, 89, 157, 151, 0, 20, 127, 231, 174, 20, 122, 225, 71,
                          175, 224, 0, 0, 0, 0];
         let r = BufferedReader::new(bytes.into_boxed_slice());
-        let mut decoder = StdDecoder::new(r);
+        let p = SimplePredictor::new();
+        let mut decoder = StdDecoder::new(r, p);
 
         let expected_datapoint = DataPoint::new(1482268055 + 10, 1.24);
 
@@ -239,7 +246,8 @@ mod tests {
                          245, 189, 111, 91, 3, 232, 1, 245, 97, 88, 86, 21, 133, 55, 202, 1, 17,
                          15, 92, 40, 245, 194, 151, 128, 0, 0, 0, 0];
         let r = BufferedReader::new(bytes.into_boxed_slice());
-        let mut decoder = StdDecoder::new(r);
+        let p = SimplePredictor::new();
+        let mut decoder = StdDecoder::new(r, p);
 
         let first_expected_datapoint = DataPoint::new(1482268055 + 10, 1.24);
         let second_expected_datapoint = DataPoint::new(1482268055 + 20, 1.98);
