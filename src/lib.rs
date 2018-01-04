@@ -130,7 +130,7 @@ impl Bit {
 #[derive(Debug, PartialEq, Copy)]
 pub struct DataPoint {
     time: u64,
-    value: f64,
+    value: i64,
 }
 
 impl Clone for DataPoint {
@@ -141,7 +141,7 @@ impl Clone for DataPoint {
 
 impl DataPoint {
     // Create a new DataPoint from a time and value.
-    pub fn new(time: u64, value: f64) -> Self {
+    pub fn new(time: u64, value: i64) -> Self {
         DataPoint {
             time: time,
             value: value,
@@ -171,22 +171,22 @@ mod tests {
     use super::stream::{BufferedReader, BufferedWriter};
     use super::decode::Error;
 
-    const DATA: &'static str = "1482892270,1.76
-1482892280,7.78
-1482892288,7.95
-1482892292,5.53
-1482892310,4.41
-1482892323,5.30
-1482892334,5.30
-1482892341,2.92
-1482892350,0.73
-1482892360,-1.33
-1482892370,-1.78
-1482892390,-12.45
-1482892401,-34.76
-1482892490,78.9
-1482892500,335.67
-1482892800,12908.12
+    const DATA: &'static str = "1482892270,176
+1482892280,778
+1482892288,795
+1482892292,553
+1482892310,441
+1482892323,530
+1482892334,530
+1482892341,292
+1482892350,073
+1482892360,-133
+1482892370,-178
+1482892390,-1245
+1482892401,-3476
+1482892490,789
+1482892500,33567
+1482892800,1290812
 ";
 
     #[test]
@@ -200,7 +200,7 @@ mod tests {
         for line in DATA.lines() {
             let substrings: Vec<&str> = line.split(",").collect();
             let t = substrings[0].parse::<u64>().unwrap();
-            let v = substrings[1].parse::<f64>().unwrap();
+            let v = substrings[1].parse::<i64>().unwrap();
             let dp = DataPoint::new(t, v);
             original_datapoints.push(dp);
         }

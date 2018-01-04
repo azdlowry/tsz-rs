@@ -28,7 +28,7 @@ pub struct StdEncoder<T: Write, P: Predictor> {
     // store the number of leading and trailing zeros in the current xor as u32 so we
     // don't have to do any conversions after calling `leading_zeros` and `trailing_zeros`
     leading_zeros: u32,
-    trailing_zeros: u32,
+    //trailing_zeros: u32,
 
     first: bool, // will next DataPoint be the first DataPoint encoded
 
@@ -47,7 +47,7 @@ impl<T, P> StdEncoder<T, P>
             delta: 0,
             predictor: p,
             leading_zeros: 64, // 64 is an initial sentinel value
-            trailing_zeros: 64, // 64 is an intitial sentinel value
+            //trailing_zeros: 64, // 64 is an intitial sentinel value
             first: true,
             w: w,
         };
@@ -72,6 +72,7 @@ impl<T, P> StdEncoder<T, P>
         self.w.write_bits(self.delta, 14);
 
         // store the first value exactly
+        println!("{}\t-> frist = {}", value_bits, value_bits);
         self.w.write_bits(value_bits, 64);
 
         self.first = true
@@ -112,25 +113,26 @@ impl<T, P> StdEncoder<T, P>
         let predicted_bits = self.predictor.predict_next();
         let xor = value_bits ^ predicted_bits;
         self.predictor.update(value_bits);
+            println!("{}\t-> xor = {}", value_bits, xor);
 
         if xor == 0 {
             // if xor with previous value is zero just store single zero bit
             self.w.write_bit(Bit::Zero);
-            //println!("-> Bit::Zero = {}", predicted_bits);
+            println!("{}\t-> Bit::Zero = {}", value_bits, predicted_bits);
         } else {
             self.w.write_bit(Bit::One);
 
             let leading_zeros = xor.leading_zeros();
-            let trailing_zeros = xor.trailing_zeros();
+            //let trailing_zeros = xor.trailing_zeros();
 
-            if leading_zeros == self.leading_zeros && trailing_zeros == self.trailing_zeros {
+            if leading_zeros == self.leading_zeros {//&& trailing_zeros == self.trailing_zeros {
                 // if the number of leading and trailing zeros in this xor are >= the leading and
                 // trailing zeros in the previous xor then we only need to store a control bit and
                 // the significant digits of this xor
-                let significant_digits = 64 - self.leading_zeros - self.trailing_zeros;
+                let significant_digits = 64 - self.leading_zeros;// - self.trailing_zeros;
+                println!("{}\t-> significant_digits unchanged {})", value_bits, significant_digits);
                 self.w.write_bit(Bit::Zero);
-                //println!("-> significant_digits {})", significant_digits);
-                self.w.write_bits(xor.wrapping_shr(self.trailing_zeros), significant_digits);
+                self.w.write_bits(xor/* .wrapping_shr(self.trailing_zeros) */, significant_digits);
             } else {
 
                 // if the number of leading and trailing zeros in this xor are not less than the
@@ -139,19 +141,18 @@ impl<T, P> StdEncoder<T, P>
                 // of significant digits before storing the significant digits themselves
 
                 self.w.write_bit(Bit::One);
-                self.w.write_bits(leading_zeros as u64, 6);
 
                 // if significant_digits is 64 we cannot encode it using 6 bits, however since
                 // significant_digits is guaranteed to be at least 1 we can subtract 1 to ensure
                 // significant_digits can always be expressed with 6 bits or less
-                let significant_digits = 64 - leading_zeros - trailing_zeros;
-                //println!("-> trailing_zeros = 64 - {} - {}", self.leading_zeros, significant_digits);
-                self.w.write_bits((significant_digits - 1) as u64, 6);
-                self.w.write_bits(xor.wrapping_shr(trailing_zeros), significant_digits);
+                let significant_digits = 64 - leading_zeros;// - trailing_zeros;
+                println!("{}\t-> significant_digits changed = 64 - {} = {}", value_bits, leading_zeros, significant_digits);
+                self.w.write_bits(leading_zeros as u64, 6);
+                self.w.write_bits(xor/* .wrapping_shr(trailing_zeros) */, significant_digits);
 
                 // finally we need to update the number of leading and trailing zeros
                 self.leading_zeros = leading_zeros;
-                self.trailing_zeros = trailing_zeros;
+                //self.trailing_zeros = trailing_zeros;
             }
         }
     }
@@ -161,7 +162,7 @@ impl<T, P> Encode for StdEncoder<T, P>
     where T: Write, P: Predictor
 {
     fn encode(&mut self, dp: DataPoint) {
-        let value_bits = unsafe { mem::transmute::<f64, u64>(dp.value) };
+        let value_bits = unsafe { mem::transmute::<i64, u64>(dp.value) };
 
         if self.first {
             self.write_first(dp.time, value_bits);
@@ -207,7 +208,7 @@ mod tests {
         let start_time = 1482268055; // 2016-12-20T21:07:35+00:00
         let mut e = StdEncoder::new(start_time, w, p);
 
-        let d1 = DataPoint::new(1482268055 + 10, 1.24);
+        let d1 = DataPoint::new(1482268055 + 10, 124);
 
         e.encode(d1);
 
@@ -225,15 +226,15 @@ mod tests {
         let start_time = 1482268055; // 2016-12-20T21:07:35+00:00
         let mut e = StdEncoder::new(start_time, w, p);
 
-        let d1 = DataPoint::new(1482268055 + 10, 1.24);
+        let d1 = DataPoint::new(1482268055 + 10, 124);
 
         e.encode(d1);
 
-        let d2 = DataPoint::new(1482268055 + 20, 1.98);
+        let d2 = DataPoint::new(1482268055 + 20, 198);
 
-        let d3 = DataPoint::new(1482268055 + 32, 2.37);
-        let d4 = DataPoint::new(1482268055 + 44, -7.41);
-        let d5 = DataPoint::new(1482268055 + 52, 103.50);
+        let d3 = DataPoint::new(1482268055 + 32, 237);
+        let d4 = DataPoint::new(1482268055 + 44, -741);
+        let d5 = DataPoint::new(1482268055 + 52, 10350);
 
         e.encode(d2);
         e.encode(d3);

@@ -16,7 +16,7 @@ pub struct StdDecoder<T: Read, P: Predictor> {
     predictor: P,
 
     leading_zeros: u32, // leading zeros
-    trailing_zeros: u32, // trailing zeros
+    //trailing_zeros: u32, // trailing zeros
 
     first: bool, // will next DataPoint be the first DataPoint decoded
     done: bool,
@@ -34,7 +34,7 @@ impl<T, P> StdDecoder<T, P>
             delta: 0,
             predictor: p,
             leading_zeros: 0,
-            trailing_zeros: 0,
+            //trailing_zeros: 0,
             first: true,
             done: false,
             r: r,
@@ -134,6 +134,7 @@ impl<T, P> StdDecoder<T, P>
             .map_err(|err| Error::Stream(err))
             .map(|bits| {
                 self.predictor.update(bits);
+                println!("<- frist = {}", bits);
                 bits
             })
     }
@@ -143,7 +144,7 @@ impl<T, P> StdDecoder<T, P>
         let predicted_value = self.predictor.predict_next();
 
         if contol_bit == Bit::Zero {
-            //println!("<- Bit::Zero = {}", predicted_value);
+            println!("<- Bit::Zero = {}", predicted_value);
             return Ok(predicted_value);
         }
 
@@ -151,18 +152,18 @@ impl<T, P> StdDecoder<T, P>
 
         if zeros_bit == Bit::One {
             self.leading_zeros = self.r.read_bits(6).map(|n| n as u32)?;
-            let significant_digits = self.r.read_bits(6).map(|n| (n + 1) as u32)?;
-            //println!("<- predicted_trailing_zeros = 64 - {} - {}", self.leading_zeros, significant_digits);
-            self.trailing_zeros = 64 - self.leading_zeros - significant_digits;
+            //let significant_digits = self.r.read_bits(6).map(|n| (n + 1) as u32)?;
+            println!("<- significant_digits changed = 64 - {} = {}", self.leading_zeros, 64 - self.leading_zeros);
+            //self.trailing_zeros = 64 - self.leading_zeros - significant_digits;
         }
 
-        let size = 64 - self.leading_zeros - self.trailing_zeros;
+        let size = 64 - self.leading_zeros;// - self.trailing_zeros;
         self.r
             .read_bits(size)
             .map_err(|err| Error::Stream(err))
             .map(|bits| {
-                let value_bits = predicted_value ^ (bits << self.trailing_zeros);
-                //println!("<- {} = {} ^ ({} << {})", value_bits, predicted_value, bits, self.trailing_zeros);
+                let value_bits = predicted_value ^ (bits);// << self.trailing_zeros);
+                println!("<- {} = {} ^ {}", value_bits, predicted_value, bits);
                 self.predictor.update(value_bits);
                 value_bits
             })
@@ -201,7 +202,7 @@ impl<T, P> Decode for StdDecoder<T, P>
             value_bits = self.read_next_value()?;
         }
 
-        let value = unsafe { mem::transmute::<u64, f64>(value_bits) };
+        let value = unsafe { mem::transmute::<u64, i64>(value_bits) };
 
         Ok(DataPoint::new(time, value))
     }
@@ -233,7 +234,7 @@ mod tests {
         let p = SimplePredictor::new();
         let mut decoder = StdDecoder::new(r, p);
 
-        let expected_datapoint = DataPoint::new(1482268055 + 10, 1.24);
+        let expected_datapoint = DataPoint::new(1482268055 + 10, 124);
 
         assert_eq!(decoder.next().unwrap(), expected_datapoint);
         assert_eq!(decoder.next().err().unwrap(), Error::EndOfStream);
@@ -249,11 +250,11 @@ mod tests {
         let p = SimplePredictor::new();
         let mut decoder = StdDecoder::new(r, p);
 
-        let first_expected_datapoint = DataPoint::new(1482268055 + 10, 1.24);
-        let second_expected_datapoint = DataPoint::new(1482268055 + 20, 1.98);
-        let third_expected_datapoint = DataPoint::new(1482268055 + 32, 2.37);
-        let fourth_expected_datapoint = DataPoint::new(1482268055 + 44, -7.41);
-        let fifth_expected_datapoint = DataPoint::new(1482268055 + 52, 103.50);
+        let first_expected_datapoint = DataPoint::new(1482268055 + 10, 124);
+        let second_expected_datapoint = DataPoint::new(1482268055 + 20, 198);
+        let third_expected_datapoint = DataPoint::new(1482268055 + 32, 237);
+        let fourth_expected_datapoint = DataPoint::new(1482268055 + 44, -741);
+        let fifth_expected_datapoint = DataPoint::new(1482268055 + 52, 10350);
 
         assert_eq!(decoder.next().unwrap(), first_expected_datapoint);
         assert_eq!(decoder.next().unwrap(), second_expected_datapoint);

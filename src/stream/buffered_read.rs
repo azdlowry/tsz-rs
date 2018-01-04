@@ -30,6 +30,7 @@ impl BufferedReader {
 
 impl Read for BufferedReader {
     fn read_bit(&mut self) -> Result<Bit, Error> {
+        println!("Reading 1 bit");
         if self.pos == 8 {
             self.index += 1;
             self.pos = 0;
@@ -49,6 +50,7 @@ impl Read for BufferedReader {
     }
 
     fn read_byte(&mut self) -> Result<u8, Error> {
+        println!("Reading 8 bits");
         if self.pos == 0 {
             self.pos += 8;
             return self.get_byte();

@@ -41,6 +41,7 @@ impl BufferedWriter {
 
 impl Write for BufferedWriter {
     fn write_bit(&mut self, bit: Bit) {
+        println!("Writing 1 bit");
         if self.pos == 8 {
             self.grow();
             self.pos = 0;
@@ -57,6 +58,7 @@ impl Write for BufferedWriter {
     }
 
     fn write_byte(&mut self, byte: u8) {
+        println!("Writing 8 bits");
         if self.pos == 8 {
             self.grow();
 
